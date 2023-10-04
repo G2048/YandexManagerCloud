@@ -1,0 +1,27 @@
+#cloud-config
+users:
+  - name: support
+    groups: sudo
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    ssh-authorized-keys:
+      ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDXJTjJFfpneKxV0kxghqJvMBV7pXje0ggMHWXpiM1WemYH/9otscHu4RzhxjcqlUglRytqDJVQDhoMk28d1r3Bd9oUUsH+y3xbZRwzVBv4DyaGozzW6R65+A9D19ztV66vDlbK45kTKU3fLgIwSHEvjyIiz7lBHN+Ncg5SCVcqrxMIeET2f4aVe6UnG2rPfuIUvXGJEhFTKRQRxqe1fhQUx9cmNEkEc1ioc8eTA9PFfsDCoeubbou/BBcXdxrOansParvKVQRdQQNAvGd629DaqtnSBQcj81mxERpLxEUl+YylxGMuUKA61m/9PAyWLhO0beXQIPgSJCnzdNOOS41nnc6enPqM8wbEpgDYymXfj3tRyzz2dJPk7iTAtNIA9lo6F3qd984CXmv9OlXgJNz/ajwiYxdVDSdvlTBqFFl5UD8fOHcCDui+ChGsiHhIJ3R5fxDMmojM/ErrUi5b7oeJxbXUZxytf19tTcesLcoumURAD/Vzz3XOI8KlrZYNntM= za-st@Haron
+runcmd:
+  - wget https://apt.puppet.com/puppet7-release-focal.deb
+  - sudo dpkg -i puppet7-release-focal.deb
+  - sudo apt-get update
+  - sudo apt-get upgrade
+  - sudo apt-get install puppet-agent -y
+  - |
+    cat <<EOF | sudo tee /etc/puppetlabs/puppet/puppet.conf
+    [server]
+    server = puppet
+    runinterval = 5m
+    vardir = /opt/puppetlabs/server/data/puppetserver
+    logdir = /var/log/puppetlabs/puppetserver
+    rundir = /var/run/puppetlabs/puppetserver
+    pidfile = /var/run/puppetlabs/puppetserver/puppetserver.pid
+    codedir = /etc/puppetlabs/code
+    EOF
+  - echo "10.10.13.122 puppet" | sudo tee -a /etc/hosts
+  - sudo /opt/puppetlabs/bin/puppet agent -vt
