@@ -1,11 +1,10 @@
 import unittest
-from yandex_sdk_api.manage_vm import ConnectToCloud, Network, SubNet, Zones
-from settings import YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_TOKEN
+from yandex_sdk_api.manage_vm import ConnectToCloud, NetworkService, SubnetService, InstanceService, Zones
+from settings import YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_IAMTOKEN
 
-YC_FOLDER_ID = 'b1gkdjgddfq76nbvmjhk'
-YC_CLOUD_ID = 'b1gda5oouc6shavprkge'
-YC_ZONE = Zones.core
+YC_ZONE = Zones.test
 
+CREDENTIALS = dict(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
 
 class TestCloudConnection(unittest.TestCase):
 
@@ -14,7 +13,7 @@ class TestCloudConnection(unittest.TestCase):
         self.assertIsNotNone(YC_CLOUD_ID)
         self.assertIsNotNone(YC_ZONE)
         self.assertIsNotNone(YC_OAUTH)
-        # self.assertIsNotNone(YC_TOKEN)
+        self.assertIsNotNone(YC_IAMTOKEN)
 
     def setUp(self):
         self.cloud = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
@@ -39,8 +38,8 @@ class TestCloudConnection(unittest.TestCase):
         print(f'{dir(self.cloud.sdk.helpers)}')
         account_id = self.cloud.sdk.helpers.find_service_account_id(folder_id=YC_FOLDER_ID)
         print(f'{account_id=}')
-        network_id = self.cloud.sdk.helpers.find_network_id(folder_id=YC_FOLDER_ID)
-        print(f'{network_id=}')
+        # network_id = self.cloud.sdk.helpers.find_network_id(folder_id=YC_FOLDER_ID)
+        # print(f'{network_id=}')
         # subnet_id = self.cloud.sdk.helpers.find_subnet_id(folder_id=YC_FOLDER_ID, zone_id=YC_ZONE)
         # print(f'{subnet_id=}')
 
@@ -48,7 +47,7 @@ class TestCloudConnection(unittest.TestCase):
 class TestCloudNetwork(unittest.TestCase):
 
     def setUp(self):
-        self.network = Network(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
+        self.network = NetworkService(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
 
     def test_list_network(self):
         list_network = self.network.list()
@@ -82,8 +81,8 @@ class TestCloudNetwork(unittest.TestCase):
 class TestCloudSubNet(unittest.TestCase):
 
     def setUp(self):
-        self.subnet = SubNet(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
-        self.network = Network(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
+        self.subnet = SubnetService(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
+        self.network = NetworkService(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
         self.network.id = self.network.list()['default']['id']
 
     def test_list_network(self):
@@ -116,3 +115,18 @@ class TestCloudSubNet(unittest.TestCase):
         # Maybe I want to use setattr ?
         subnet_id = subnet_list['subnet-test-1']['id']
         self.subnet.delete(subnet_id)
+
+
+class TestCreeateInstance(unittest.TestCase):
+    def setUp(self):
+        self.instance = InstanceService(**CREDENTIALS)
+
+    def test_create_instance(self):
+        # subnet_id = 'e2l2gj8g1sl2rq8vurkt'
+        self.instance.create('test-create-grpc-vm')
+
+    def test_list_instances(self):
+        pass
+
+    def test_stop_instance(self):
+        self.instance.stop()

@@ -166,3 +166,4 @@ REVERSE/*
 
 # Custom ignore
 authorized_key.json
+/.idea/*

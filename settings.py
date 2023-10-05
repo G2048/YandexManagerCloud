@@ -3,7 +3,7 @@ from os import environ
 from dotenv import load_dotenv
 
 load_dotenv()
-YC_TOKEN = environ.get('YC_TOKEN')
+YC_IAMTOKEN = environ.get('YC_IAMTOKEN')
 YC_CLOUD_ID = environ.get('YC_CLOUD_ID')
 YC_FOLDER_ID = environ.get('YC_FOLDER_ID')
 YC_OAUTH = environ.get('YC_OAUTH')

@@ -13,34 +13,22 @@ logger = logging.getLogger('')
 logger.setLevel(20)
 
 
-class IApi(ABC):
-
-    @abstractmethod
-    def get_images(self):
-        pass
-
-    @abstractmethod
-    def get_instances(self):
-        pass
-
-
-class YandexApiFactory:
+class Api:
     '''curl.exe -H "Authorization: Bearer $Env:YC_TOKEN"
     "https://compute.api.cloud.yandex.net/compute/v1/images?folderId=standard-images&pageSize=1000"
     '''
 
     __instance = None
-    API_URL = 'https://compute.api.cloud.yandex.net/'
-    IAM_TOKEN = YC_TOKEN
-    HEADERS = {'Authorization': f'Bearer {IAM_TOKEN}'}
 
-    def __new__(cls, ):
+    def __new__(cls, *args, **kwargs):
         if cls.__instance is None:
-            cls.__instance = super().__new__(cls)
+            cls.__instance = super().__new__(cls, *args, **kwargs)
         return cls.__instance
 
-    def __init__(self, ):
-        pass
+    def __init__(self, service):
+        IAM_TOKEN = YC_TOKEN
+        API_URL = f'https://{service}.api.cloud.yandex.net/'
+        HEADERS = {'Authorization': f'Bearer {IAM_TOKEN}'}
 
     @staticmethod
     def _validateJson(jsondata):
@@ -49,9 +37,9 @@ class YandexApiFactory:
         except exceptions.JSONDecodeError as e:
             return False
 
-    def _request(self, url, params, *args, **kwargs):
+    def _request(self, url, params, method='GET', *args, **kwargs):
         logger.debug(f'{url}, {params=}, {self.HEADERS=}')
-        response = requests.get(url=url, params=params, headers=self.HEADERS)
+        response = requests.request(method, url=url, params=params, headers=self.HEADERS)
         logger.debug(response.status_code)
 
         if response.ok:
@@ -62,7 +50,12 @@ class YandexApiFactory:
                 return response.text
 
 
-class YandexApi(IApi, YandexApiFactory):
+class YandexInstance(Api):
+    def __init__(self):
+        super().__init__()
+
+
+class YandexApi(IApi, Api):
     def __init__(self, ):
         super().__init__()
 

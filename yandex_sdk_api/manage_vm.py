@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import argparse
+import sys
+import traceback
 import logging.config
 
 import grpc
@@ -24,6 +26,7 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     StartInstanceRequest,
     CreateInstanceMetadata,
     DeleteInstanceMetadata,
+    ListInstancesRequest,
 )
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import InstanceServiceStub
 
@@ -46,87 +49,6 @@ class Zones:
     draft = 'ru-central1-c'
 
 
-def collect_metadata():
-    with open('../metadata_instances/vm_user_metadata', 'r') as file:
-        file_content = file.readlines()
-
-    file_content = ''.join(file_content)
-    logging.debug(file_content)
-    return file_content
-
-
-def create_instance(sdk, folder_id, zone, name, subnet_id):
-    image_service = sdk.client(ImageServiceStub)
-    logger.info(f'{dir(GetImageLatestByFamilyRequest)}')
-    vm_metadata = {
-        'serial-port-enable': '1',
-        'user-data': collect_metadata(),
-    }
-    metadata = {'metadata-value': ''}
-    vm_metadata.update(metadata)
-
-    source_image = image_service.GetLatestByFamily(
-        GetImageLatestByFamilyRequest(
-            folder_id='standard-images',
-            family='ubuntu-2004-lts',
-            # disk_id = 'fd83gfh90hpp3sojs1r3',
-        )
-    )
-
-    subnet_id = subnet_id or sdk.helpers.get_subnet(folder_id, zone)
-    instance_service = sdk.client(InstanceServiceStub)
-    operation = instance_service.Create(CreateInstanceRequest(
-        folder_id=folder_id,
-        name=name,
-        resources_spec=ResourcesSpec(
-            memory=2 * 2 ** 30,  # 2Gb
-            cores=2,
-            core_fraction=50,
-        ),
-
-        zone_id=zone,
-        platform_id='standard-v1',
-        boot_disk_spec=AttachedDiskSpec(
-            auto_delete=True,
-            disk_spec=AttachedDiskSpec.DiskSpec(
-                type_id='network-hdd',
-                size=20 * 2 ** 30,  # 2GB
-                image_id=source_image.id,
-            )
-        ),
-
-        network_interface_specs=[
-            NetworkInterfaceSpec(
-                subnet_id=subnet_id,
-                primary_v4_address_spec=PrimaryAddressSpec(
-                    one_to_one_nat_spec=OneToOneNatSpec(
-                        ip_version=IPV4,
-                    )
-                )
-            ),
-        ],
-        metadata=vm_metadata,
-    ))
-
-    logger.info('Creating initiated')
-
-
-def create_vm():
-    try:
-        operation = create_instance(sdk, arguments.folder_id, arguments.zone, arguments.name, arguments.subnet_id)
-        operation_result = sdk.wait_operation_and_get_result(
-            operation,
-            response_type=Instance,
-            meta_type=CreateInstanceMetadata,
-        )
-
-        instance_id = operation_result.response.id
-        logger.info(f'{instance_id=}')
-
-    except Exception as e:
-        logger.error(e)
-
-
 class ConnectToCloud:
 
     def __init__(self, cloud_id, folder_id, zone, oauth=None, token=None, **kwargs):
@@ -143,7 +65,7 @@ class ConnectToCloud:
         self.networks_service = self.sdk.client(NetworkServiceStub)
 
 
-class Network(ConnectToCloud):
+class NetworkService(ConnectToCloud):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -182,7 +104,7 @@ class Network(ConnectToCloud):
         return 0
 
 
-class SubNet(ConnectToCloud):
+class SubnetService(ConnectToCloud):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -223,9 +145,9 @@ class SubNet(ConnectToCloud):
         return 0
 
 
-class VirtualMachine(ConnectToCloud):
+class InstanceService(ConnectToCloud):
 
-    def __init__(self, instance_id, **kwargs):
+    def __init__(self, instance_id=None, **kwargs):
         super().__init__(**kwargs)
         # self.fill_missing_arguments()
         self.instance_id = instance_id
@@ -246,48 +168,114 @@ class VirtualMachine(ConnectToCloud):
     def stop(self):
         operation = self.instance_service.Stop(StopInstanceRequest(instance_id=self.instance_id))
         logger.info(f'Try to stop instance {self.instance_id}')
-        self.sdk.wait_operation_and_get_result(operation)
+        response = self.sdk.wait_operation_and_get_result(operation)
         logger.info(f'Stop instance {self.instance_id}')
-        return 0
+        return response
 
     def start(self):
         operation = self.instance_service.Start(StartInstanceRequest(instance_id=self.instance_id))
         logger.info(f'Try to start instance {self.instance_id}')
         response = self.sdk.wait_operation_and_get_result(operation)
         logger.info(f'Start instance {self.instance_id}')
-        return 0
+        return response
 
-
-class VirtualMachinesManager(ConnectToCloud):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def list_instance(self):
-        operation = self.instance_service.List(ListCloudsRequest(organization_id=self.FOLDER_ID))
+    def list(self):
         logger.info(f'Folder id: {self.FOLDER_ID=}')
-        response = self.sdk.wait_operation_and_get_result(operation)
-        logger.info(f'List instances {response=}')
-        return 0
+        # метод List работает без операций и сразу возвращает результат
+        response = self.instance_service.List(ListInstancesRequest(folder_id=self.FOLDER_ID))
+        logger.debug(f'List instances {response=}')
+        return response
 
+    def create(self, name, subnet_id='enptcfuhbr6prphvj0re'):
+        try:
+            self._get_source_image()
+            self._vm_metadata = self._fill_metadata()
+            self._vm_resourse = self._fill_resourse()
+            operation = self._create_instance(name, subnet_id)
+            operation_result = self.sdk.wait_operation_and_get_result(
+                operation,
+                response_type=Instance,
+                meta_type=CreateInstanceMetadata,
+            )
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-    parser.add_argument('--zone', default='ru-central1-a', help='Compute Engine zone to deploy to.')
-    parser.add_argument('--name', default='demo-instance', help='New instance name.')
-    parser.add_argument('--subnet-id', help='Subnet of the instance')
-    parser.add_argument('--delete', '-d', action='store_true', default=False, help='Delete instance')
-    parser.add_argument('--stop', '-s', action='store_true', default=False, help='Stop instance')
-    parser.add_argument('--start', '-st', action='store_true', default=False, help='Start instance')
-    parser.add_argument('--instance-id', '-id', help='Specify instance')
-    parser.add_argument('--list-instances', '-l', action='store_true', default=False, help='List instances')
+            instance_id = operation_result.response.id
+            logger.info(f'{instance_id=}')
 
-    return parser.parse_args()
+        except Exception as e:
+            # logger.error(traceback.extract_stack())
+            logger.error(e, exc_info=True)
 
+    # For platform "standard-v1"
+    # allowed core fractions: 5, 20, 100
+    # allowed memory size: 1GB, 2GB, 3GB, 4GB, 5GB, 6GB, 7GB, 8GB.
+    def _fill_resourse(self, memory=2 * 2 ** 30, cores=2, core_fraction=20):
+        # memory = 2 * 2 ** 30 = 2147483648  # 2Gb
+        return {
+            'memory': memory,
+            'cores': cores,
+            'core_fraction': core_fraction
+        }
 
-if __name__ == '__main__':
-    arguments = parse_args()
-    logger.debug(f'{arguments=}')
+    def _fill_metadata(self, **kwargs):
+        vm_metadata = {
+            'serial-port-enable': '1',
+            'user-data': self._collect_metadata(),
+        }
+
+        metadata = {'metadata-value': ''}
+        vm_metadata.update(metadata)
+        vm_metadata.update(kwargs)
+        return vm_metadata
+
+    def _get_source_image(self):
+        logger.info(f'{dir(GetImageLatestByFamilyRequest)}')
+        image_service = self.sdk.client(ImageServiceStub)
+        self.source_image = image_service.GetLatestByFamily(
+            GetImageLatestByFamilyRequest(
+                folder_id='standard-images',
+                family='ubuntu-2004-lts',
+                # disk_id = 'fd83gfh90hpp3sojs1r3',
+            )
+        )
+
+    def _create_instance(self, name, subnet_id):
+
+        subnet_id = self.sdk.helpers.find_subnet_id(self.FOLDER_ID, self.ZONE)
+        logger.debug(f'{subnet_id=}')
+        # TODO: Here is created Traceback!
+        operation = self.instance_service.Create(CreateInstanceRequest(
+            name=name,
+            folder_id=self.FOLDER_ID,
+            zone_id=self.ZONE,
+            metadata=self._vm_metadata,
+            platform_id='standard-v1',
+            resources_spec=ResourcesSpec(**self._vm_resourse),
+            boot_disk_spec=AttachedDiskSpec(
+                auto_delete=True,
+                disk_spec=AttachedDiskSpec.DiskSpec(
+                    type_id='network-hdd',
+                    size=20 * 2 ** 30,  # 2GB
+                    image_id=self.source_image.id,
+                )
+            ),
+            network_interface_specs=[
+                NetworkInterfaceSpec(
+                    subnet_id=subnet_id,
+                    primary_v4_address_spec=PrimaryAddressSpec(
+                        one_to_one_nat_spec=OneToOneNatSpec(
+                            ip_version=IPV4,
+                        )
+                    )
+                ),
+            ],
+        ))
+        logger.info(f'Creating virtual machine {name} initiated!')
+        return operation
+
+    @staticmethod
+    def _collect_metadata() -> str:
+        with open('../metadata_instances/vm_user_metadata', 'r') as file:
+            file_content = file.readlines()
+
+        file_content = ''.join(file_content)
+        return file_content
