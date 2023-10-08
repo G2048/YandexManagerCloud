@@ -1,1 +1,1 @@
-from . import manage_vm
+from . import yandex_api

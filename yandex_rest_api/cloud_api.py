@@ -55,7 +55,7 @@ class YandexInstance(Api):
         super().__init__()
 
 
-class YandexApi(IApi, Api):
+class YandexApi(Api):
     def __init__(self, ):
         super().__init__()
 

@@ -1,6 +1,6 @@
 import logging.config
 import argparse
-from yandex_sdk_api.manage_vm import Zones, InstanceService
+from yandex_sdk_api.yandex_api import Zones, ConnectToCloud, InstanceService
 from settings import LogConfig, YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_IAMTOKEN
 
 logging.config.dictConfig(LogConfig)
@@ -26,7 +26,8 @@ def parse_args():
 if __name__ == '__main__':
     arguments = parse_args()
     instance_id = 'epd73lmno3ta9f9eagtn'
-    instance = InstanceService(instance_id, **CREDENTIALS)
+    connector = ConnectToCloud(**CREDENTIALS)
+    instance = InstanceService(instance_id, connector=connector)
     actions = {
         'stop': instance.stop,
         'list': instance.list,
@@ -36,6 +37,8 @@ if __name__ == '__main__':
         argument, value = pair
         action = actions.get(argument)
         if action and value:
-            action()
+            instances = action().instances
+            print(f'{dir(action())}')
+            print(f'{instance.instances=}')
 
 

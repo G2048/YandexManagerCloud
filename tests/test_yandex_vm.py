@@ -1,10 +1,11 @@
 import unittest
-from yandex_sdk_api.manage_vm import ConnectToCloud, NetworkService, SubnetService, InstanceService, Zones
+from yandex_sdk_api.yandex_api import ConnectToCloud, YandexCloud, NetworkService, SubnetService, InstanceService, Zones
 from settings import YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_IAMTOKEN
 
 YC_ZONE = Zones.test
 
 CREDENTIALS = dict(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
+
 
 class TestCloudConnection(unittest.TestCase):
 
@@ -16,7 +17,8 @@ class TestCloudConnection(unittest.TestCase):
         self.assertIsNotNone(YC_IAMTOKEN)
 
     def setUp(self):
-        self.cloud = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
+        connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
+        self.cloud = YandexCloud(connector)
 
     def test_connect_to_cloud(self):
         print(self.cloud)
@@ -25,13 +27,7 @@ class TestCloudConnection(unittest.TestCase):
         # '_channels', '_default_interceptor', 'client', 'create_operation_and_get_result', 'helpers', 'set_interceptor', 'wait_operation_and_get_result', 'waiter', 'wrappers'
         print(f'{dir(self.cloud.sdk)}')
 
-    def test_sdk_client(self):
-        # 'AddOneToOneNat', 'AttachDisk', 'AttachFilesystem', 'Create', 'Delete',
-        # 'DetachDisk', 'DetachFilesystem', 'Get', 'GetSerialPortOutput', 'List',
-        # 'ListAccessBindings', 'ListOperations', 'Move', 'Relocate', 'RemoveOneToOneNat',
-        # 'Restart', 'SetAccessBindings', 'Start', 'Stop', 'Update', 'UpdateAccessBindings',
-        # 'UpdateMetadata', 'UpdateNetworkInterface'
-        print(f'{dir(self.cloud.instance_service)}')
+
 
     def test_helpers(self):
         # 'find_network_id', 'find_service_account_id', 'find_subnet_id', 'sdk'
@@ -47,31 +43,36 @@ class TestCloudConnection(unittest.TestCase):
 class TestCloudNetwork(unittest.TestCase):
 
     def setUp(self):
-        self.network = NetworkService(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
+        connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
+        self.network = NetworkService(connector)
 
     def test_list_network(self):
-        list_network = self.network.list()
+        networks = self.network.list()
         # 'ByteSize', 'Clear', 'ClearExtension', 'ClearField', 'CopyFrom',
         # 'DESCRIPTOR', 'DiscardUnknownFields', 'Extensions', 'FindInitializationErrors',
         # 'FromString', 'HasExtension', 'HasField', 'IsInitialized', 'ListFields',
         # 'MergeFrom', 'MergeFromString', 'ParseFromString','RegisterExtension',
         # 'SerializePartialToString', 'SerializeToString', 'SetInParent', 'UnknownFields',
         # 'WhichOneof', '_CheckCalledFromGeneratedFile', '_ListFieldsItemKey', '_SetListener',
-        # print(f'{dir(list_network)}')
-        # print(f'{list_network.ListFields()}')
+        print(f'{dir(networks)=}')
+        list_filds = networks.ListFields()
+        self.assertIsInstance(list_filds, list)
+        print(f'{list_filds=}')
+
+        list_networks = networks.networks
+        self.assertGreater(len(list_networks), 0)
+        # self.assertIsInstance(list_networks, list)
+        print(f'{list_networks=}')
+
+        print(f'{dir(networks.DESCRIPTOR)=}')
+        print(f'{networks.DESCRIPTOR.fields=}')
+        print(f'{networks.SerializeToString()=}')
         # networks = list_network.networks
-        self.assertGreater(len(list_network), 0)
-        # print(f'{networks=}')
-        # type(networks[0])=<class 'yandex.cloud.vpc.v1.network_pb2.Network'>
-        print(f'{list_network=}')
-        # print(f'{list_network=}')
-        # print(f'{networks[0].id=}')
-        # print(f'{networks[1].id=}')
-        # print(f'{networks[0].name=}')
-        # print(f'{networks[1].name=}')
-        # print(f'{networks[0].default_security_group_id=}')
-        # print(f'{networks[0].created_at=}')
-        # print(f'{networks[0].folder_id=}')
+        print(f'{self.network._handle_filds_todict(networks.networks)=}')
+        print(f'{self.network.networks=}')
+        import sys
+        print(f'{sys.getsizeof(self.network.networks)=}')
+
 
     def test_create_network(self):
         sub_name = 'network-test-1'
@@ -81,24 +82,18 @@ class TestCloudNetwork(unittest.TestCase):
 class TestCloudSubNet(unittest.TestCase):
 
     def setUp(self):
-        self.subnet = SubnetService(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
-        self.network = NetworkService(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
-        self.network.id = self.network.list()['default']['id']
+        connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
+        self.subnet = SubnetService(connector)
+        self.network = NetworkService(connector)
+        # self.network.id = self.network.list()['default']['id']
 
-    def test_list_network(self):
+
+    def test_list_subnetnetwork(self):
         # subnets = self.subnet.subnets
         subnets = self.subnet.list()
-        self.assertGreater(len(subnets), 0)
-        print(f'{subnets["subnet1"]}')
-        print(f'{subnets}')
-        # print(f'{subnets=}')
-        # print(f'{subnets[0].id=}')
-        # print(f'{subnets[0].name=}')
-        # print(f'{subnets[0].created_at=}')
-        # print(f'{subnets[0].folder_id=}')
-        # print(f'{subnets[0].network_id=}')
-        # print(f'{subnets[0].zone_id=}')
-        # print(f'{subnets[0].v4_cidr_blocks[0]=}')
+        self.assertGreater(len(self.subnet.subnets), 0)
+        print(f'{self.subnet.subnets["name"]=}')
+        print(f'{self.subnet.subnets=}')
 
     def test_create_subnet(self):
         sub_name = 'subnet-test-1'
@@ -117,10 +112,18 @@ class TestCloudSubNet(unittest.TestCase):
         self.subnet.delete(subnet_id)
 
 
-class TestCreeateInstance(unittest.TestCase):
+class TestCreateInstance(unittest.TestCase):
     def setUp(self):
-        self.instance = InstanceService(**CREDENTIALS)
+        connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
+        self.instance = InstanceService(connector=connector)
 
+    def test_sdk_instance(self):
+        # 'AddOneToOneNat', 'AttachDisk', 'AttachFilesystem', 'Create', 'Delete',
+        # 'DetachDisk', 'DetachFilesystem', 'Get', 'GetSerialPortOutput', 'List',
+        # 'ListAccessBindings', 'ListOperations', 'Move', 'Relocate', 'RemoveOneToOneNat',
+        # 'Restart', 'SetAccessBindings', 'Start', 'Stop', 'Update', 'UpdateAccessBindings',
+        # 'UpdateMetadata', 'UpdateNetworkInterface'
+        print(f'{dir(self.cloud.instance_service)}')
     def test_create_instance(self):
         # subnet_id = 'e2l2gj8g1sl2rq8vurkt'
         self.instance.create('test-create-grpc-vm')

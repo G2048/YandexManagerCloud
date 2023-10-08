@@ -50,7 +50,6 @@ class Zones:
 
 
 class ConnectToCloud:
-
     def __init__(self, cloud_id, folder_id, zone, oauth=None, token=None, **kwargs):
         self.TOKEN = token
         self.CLOUD_ID = cloud_id
@@ -58,17 +57,25 @@ class ConnectToCloud:
         self.OAUTH = oauth
         self.ZONE = zone
 
-        interceptor = yandexcloud.RetryInterceptor(max_retry_count=10, retriable_codes=[grpc.StatusCode.UNAVAILABLE])
-        self.sdk = yandexcloud.SDK(interceptor=interceptor, token=self.OAUTH)
-        self.instance_service = self.sdk.client(InstanceServiceStub)
-        self.subnet_service = self.sdk.client(SubnetServiceStub)
+
+class YandexCloud:
+    def __init__(self, connector):
+        self.connection = connector
+        __interceptor = yandexcloud.RetryInterceptor(max_retry_count=10, retriable_codes=[grpc.StatusCode.UNAVAILABLE])
+        self.sdk = yandexcloud.SDK(interceptor=__interceptor, token=self.connection.OAUTH)
+        self.FOLDER_ID = self.connection.FOLDER_ID
+        self.ZONE = self.connection.ZONE
+
+
+class NetworkService(YandexCloud):
+    _list_filds = (
+        'id', 'name', 'folder_id', 'created_at', 'default_security_group_id'
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.networks_service = self.sdk.client(NetworkServiceStub)
-
-
-class NetworkService(ConnectToCloud):
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        self.networks = dict()
         # self.network_id = self.sdk.helpers.find_network_id(folder_id=self.FOLDER_ID)
         # self.subnet_id = self.sdk.helpers.find_subnet_id(
         #     folder_id=self.FOLDER_ID,
@@ -76,18 +83,30 @@ class NetworkService(ConnectToCloud):
         #     network_id=self.network_id,
         # )
 
+    # def _handle_request(self, request):
     def list(self):
-        self.networks = dict()
-        networks = self.networks_service.List(ListNetworksRequest(folder_id=self.FOLDER_ID)).networks
+        networks = self.networks_service.List(ListNetworksRequest(folder_id=self.FOLDER_ID))
+        self._handle_filds_tolist(networks.networks)
+        return networks
+
+    def _handle_filds_todict(self, networks):
+        self.networks = {}
         for network in networks:
             vault = {}
             self.networks[network.name] = vault
-            vault['id'] = network.id
-            vault['name'] = network.name
-            vault['security_group_id'] = network.default_security_group_id
-            vault['created_at'] = network.created_at
-            vault['folder_id'] = network.folder_id
+            for fild in self._list_filds:
+                vault[fild] = getattr(network, fild)
+        return self.networks
 
+    def _handle_filds_tolist(self, networks):
+        self.networks = {}
+        for fild in self._list_filds:
+            self.networks[fild] = []
+
+        for network in networks:
+            for fild in self._list_filds:
+                value = getattr(network, fild)
+                self.networks[fild].append(value)
         return self.networks
 
     def create(self, network_name):
@@ -104,26 +123,42 @@ class NetworkService(ConnectToCloud):
         return 0
 
 
-class SubnetService(ConnectToCloud):
+class SubnetService(YandexCloud):
+    _list_filds = (
+        'id', 'name', 'created_at',
+        'folder_id', 'description',
+        'network_id', 'zone_id', 'v4_cidr_blocks'
+    )
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.subnets = dict()
+        self.subnet_service = self.sdk.client(SubnetServiceStub)
 
     def list(self):
-        self.subnets = dict()
-        subnets = self.subnet_service.List(ListSubnetsRequest(folder_id=self.FOLDER_ID)).subnets
+        subnets = self.subnet_service.List(ListSubnetsRequest(folder_id=self.FOLDER_ID))
+        self._handle_filds_tolist(subnets.subnets)
+        return subnets
 
+    def _handle_filds_todict(self, subnets):
+        self.subnets = {}
         for subnet in subnets:
             vault = {}
             self.subnets[subnet.name] = vault
-            vault['id'] = subnet.id
-            vault['name'] = subnet.name
-            vault['folder_id'] = subnet.folder_id
-            vault['created_at'] = subnet.created_at
-            vault['description'] = subnet.description
-            vault['network_id'] = subnet.network_id
-            vault['zone_id'] = subnet.zone_id
-            vault['ip_area'] = subnet.v4_cidr_blocks
+            for fild in self._list_filds:
+                vault[fild] = getattr(subnet, fild)
+        return self.subnets
+
+    def _handle_filds_tolist(self, subnets):
+        self.subnets = {}
+
+        for fild in self._list_filds:
+            self.subnets[fild] = []
+
+        for subnet in subnets:
+            for fild in self._list_filds:
+                value = getattr(subnet, fild)
+                self.subnets[fild].append(value)
         return self.subnets
 
     def create(self, subnet_name, network_id, ip_area, **kwargs):
@@ -145,12 +180,31 @@ class SubnetService(ConnectToCloud):
         return 0
 
 
-class InstanceService(ConnectToCloud):
+class InstanceService(YandexCloud):
+    _list_filds = (
+        'id', 'name', 'created_at', 'folder_id',
+        'description', 'zone_id', 'platform_id',
+        'resources', 'status', 'metadata_options',
+        'boot_disk', 'network_interfaces', 'gpu_settings',
+        'fqdn', 'scheduling_policy', 'service_account_id',
+        'network_settings', 'placement_policy'
+    )
+    _filds_network_settings = ('type', )
+    _filds_scheduling_policy = ('preemptible',)
+    _filds_created_at = ('seconds',)
 
-    def __init__(self, instance_id=None, **kwargs):
-        super().__init__(**kwargs)
-        # self.fill_missing_arguments()
+    _filds_network_interfaces = ('index', 'mac_address', 'subnet_id', 'primary_v4_address', )
+    _filds_primary_v4_address = ('address', 'one_to_one_nat', )
+    _filds_one_to_one_nat = ('ip_version')
+
+    _filds_boot_disk = ('mode', 'device_name', 'auto_delete', 'disk_id')
+    _filds_metadata_options = ('gce_http_endpoint', 'aws_v1_http_endpoint', 'gce_http_token', 'aws_v1_http_token')
+    _filds_resources = ('memory', 'cores', 'core_fraction')
+    def __init__(self, instance_id=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.instance_id = instance_id
+        self.instance_service = self.sdk.client(InstanceServiceStub)
+        # self.fill_missing_arguments()
 
     def fill_missing_arguments(self):
         pass
@@ -182,9 +236,22 @@ class InstanceService(ConnectToCloud):
     def list(self):
         logger.info(f'Folder id: {self.FOLDER_ID=}')
         # метод List работает без операций и сразу возвращает результат
-        response = self.instance_service.List(ListInstancesRequest(folder_id=self.FOLDER_ID))
-        logger.debug(f'List instances {response=}')
-        return response
+        instances = self.instance_service.List(ListInstancesRequest(folder_id=self.FOLDER_ID))
+        self._handle_filds_tolist(instances.instances)
+        # logger.debug(f'List instances {instances=}')
+        return instances
+
+    def _handle_filds_tolist(self, instance):
+        self.instances = {}
+
+        for fild in self._list_filds:
+            self.instances[fild] = []
+
+        for subnet in instance:
+            for fild in self._list_filds:
+                value = getattr(subnet, fild)
+                self.instances[fild].append(value)
+        return self.instances
 
     def create(self, name, subnet_id='enptcfuhbr6prphvj0re'):
         try:
