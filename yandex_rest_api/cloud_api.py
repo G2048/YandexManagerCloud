@@ -6,7 +6,7 @@ import logging.config
 
 from abc import ABC, abstractmethod
 from requests import exceptions
-from settings import LogConfig, YC_TOKEN, YC_CLOUD_ID, YC_FOLDER_ID
+from settings import LogConfig, YC_IAMTOKEN, YC_CLOUD_ID, YC_FOLDER_ID
 
 logging.config.dictConfig(LogConfig)
 logger = logging.getLogger('')
@@ -26,15 +26,14 @@ class Api:
         return cls.__instance
 
     def __init__(self, service):
-        IAM_TOKEN = YC_TOKEN
-        API_URL = f'https://{service}.api.cloud.yandex.net/'
-        HEADERS = {'Authorization': f'Bearer {IAM_TOKEN}'}
+        self.API_URL = f'https://{service}.api.cloud.yandex.net/'
+        self.HEADERS = {'Authorization': f'Bearer {YC_IAMTOKEN}'}
 
     @staticmethod
     def _validateJson(jsondata):
         try:
             return jsondata()
-        except exceptions.JSONDecodeError as e:
+        except exceptions.JSONDecodeError:
             return False
 
     def _request(self, url, params, method='GET', *args, **kwargs):
@@ -47,7 +46,7 @@ class Api:
             if data_json:
                 return data_json
             else:
-                return response.text
+                return None
 
 
 class YandexInstance(Api):

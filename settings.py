@@ -17,7 +17,8 @@ LogConfig = {
     'formatters': {
         'details': {
             'class': 'logging.Formatter',
-            'format': '%(asctime)s::%(name)s::%(lineno)d::%(levelname)s::%(message)s',
+            'format': '%(asctime)s::%(levelname)s::%(filename)s::%(funcName)s::%(lineno)d::%(message)s',
+
             'incremental': True,
         },
     },
@@ -40,7 +41,7 @@ LogConfig = {
     'loggers': {
         '': {
             'level': 'NOTSET',
-            'handlers': ['rotate', 'console'],
+            'handlers': ['rotate'],
         },
         'consolemode': {
             'level': 'DEBUG',

@@ -4,6 +4,7 @@ import argparse
 import sys
 import traceback
 import logging.config
+from typing import Dict, Any
 
 import grpc
 import yandexcloud
@@ -48,18 +49,30 @@ class Zones:
     test = 'ru-central1-b'
     draft = 'ru-central1-c'
 
+# About platforms see more:
+# https://cloud.yandex.com/en-ru/docs/compute/concepts/vm-platforms
+# https://cloud.yandex.com/en-ru/docs/compute/concepts/performance-levels
+@dataclass
+class Platforms:
+    v1 = 'standard-v1'
+    v2 = 'standard-v2'
+    v3 = 'standard-v3'
+    highperformance = 'highfreq-v3'
+
 
 class ConnectToCloud:
     def __init__(self, cloud_id, folder_id, zone, oauth=None, token=None, **kwargs):
-        self.TOKEN = token
         self.CLOUD_ID = cloud_id
         self.FOLDER_ID = folder_id
-        self.OAUTH = oauth
         self.ZONE = zone
+        self.OAUTH = oauth
+        self.TOKEN = token
+
 
 
 class YandexCloud:
-    def __init__(self, connector):
+    def __init__(self, connector, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.connection = connector
         __interceptor = yandexcloud.RetryInterceptor(max_retry_count=10, retriable_codes=[grpc.StatusCode.UNAVAILABLE])
         self.sdk = yandexcloud.SDK(interceptor=__interceptor, token=self.connection.OAUTH)
@@ -151,7 +164,6 @@ class SubnetService(YandexCloud):
 
     def _handle_filds_tolist(self, subnets):
         self.subnets = {}
-
         for fild in self._list_filds:
             self.subnets[fild] = []
 
@@ -181,6 +193,7 @@ class SubnetService(YandexCloud):
 
 
 class InstanceService(YandexCloud):
+    INSTANCES: dict[Any, Any]
     _list_filds = (
         'id', 'name', 'created_at', 'folder_id',
         'description', 'zone_id', 'platform_id',
@@ -189,22 +202,68 @@ class InstanceService(YandexCloud):
         'fqdn', 'scheduling_policy', 'service_account_id',
         'network_settings', 'placement_policy'
     )
-    _filds_network_settings = ('type', )
+    _filds_network_settings = ('type',)
     _filds_scheduling_policy = ('preemptible',)
     _filds_created_at = ('seconds',)
 
-    _filds_network_interfaces = ('index', 'mac_address', 'subnet_id', 'primary_v4_address', )
-    _filds_primary_v4_address = ('address', 'one_to_one_nat', )
-    _filds_one_to_one_nat = ('ip_version')
+    _filds_network_interfaces = ('index', 'mac_address', 'subnet_id', 'primary_v4_address',)
+    _filds_primary_v4_address = ('address', 'one_to_one_nat',)
+    _filds_one_to_one_nat = ('ip_version',)
 
     _filds_boot_disk = ('mode', 'device_name', 'auto_delete', 'disk_id')
     _filds_metadata_options = ('gce_http_endpoint', 'aws_v1_http_endpoint', 'gce_http_token', 'aws_v1_http_token')
     _filds_resources = ('memory', 'cores', 'core_fraction')
-    def __init__(self, instance_id=None, *args, **kwargs):
+    _list_filds_1 = (
+        'id', 'name', 'created_at', 'folder_id',
+        'description', 'zone_id', 'platform_id',
+        'resources', 'status', 'metadata_options',
+        'boot_disk', 'network_interfaces', 'gpu_settings',
+        'fqdn', 'scheduling_policy', 'service_account_id',
+        'network_settings', 'placement_policy', 'type',
+        'preemptible', 'seconds', 'index', 'mac_address',
+        'subnet_id', 'primary_v4_address', 'address', 'one_to_one_nat',
+        'ip_version', 'mode', 'device_name', 'auto_delete', 'disk_id',
+        'gce_http_endpoint', 'aws_v1_http_endpoint', 'gce_http_token', 'aws_v1_http_token',
+    )
+
+    def __init__(self, instance_id=None,  *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.instance_id = instance_id
         self.instance_service = self.sdk.client(InstanceServiceStub)
         # self.fill_missing_arguments()
+
+    def list(self):
+        # метод List работает без операций и сразу возвращает результат
+        instances = self.instance_service.List(ListInstancesRequest(folder_id=self.FOLDER_ID))
+        self._handle_filds_tolist(instances.instances)
+        # logger.debug(f'List instances {instances=}')
+        return instances
+
+    def _handle_filds_tolist(self, instances):
+        self.INSTANCES = {}
+        self.__iter_instances(instances, self._list_filds)
+
+        return self.INSTANCES
+    def __iter_instances(self, instances, list_filds):
+        for fild in list_filds:
+            self.INSTANCES[fild] = []
+
+        for instance in instances:
+            for fild in list_filds:
+                value = getattr(instance, fild)
+                if f'_filds_{fild}' in locals().keys():
+                    value = self.__iter(instance.fild, locals()[fild])
+                self.INSTANCES[fild].append(value)
+        return
+
+    def __iter(self, instance, list_filds):
+        vault = {}
+        for fild in list_filds:
+            # if f'_filds_{fild}' in locals().keys():
+                # self.__iter(locals()[fild])
+            value = getattr(instance, fild)
+            vault[fild].append(value)
+        return vault
 
     def fill_missing_arguments(self):
         pass
@@ -233,31 +292,17 @@ class InstanceService(YandexCloud):
         logger.info(f'Start instance {self.instance_id}')
         return response
 
-    def list(self):
-        logger.info(f'Folder id: {self.FOLDER_ID=}')
-        # метод List работает без операций и сразу возвращает результат
-        instances = self.instance_service.List(ListInstancesRequest(folder_id=self.FOLDER_ID))
-        self._handle_filds_tolist(instances.instances)
-        # logger.debug(f'List instances {instances=}')
-        return instances
+    # def __call__(self, *args, **kwargs):
+    #     print('__call__ is release!')
+    #         raise ValueError('Instance has not is None!')
+    #     object.__call__(*args, **kwargs)
 
-    def _handle_filds_tolist(self, instance):
-        self.instances = {}
-
-        for fild in self._list_filds:
-            self.instances[fild] = []
-
-        for subnet in instance:
-            for fild in self._list_filds:
-                value = getattr(subnet, fild)
-                self.instances[fild].append(value)
-        return self.instances
-
-    def create(self, name, subnet_id='enptcfuhbr6prphvj0re'):
+    def create(self, name, subnet_id='enptcfuhbr6prphvj0re', platform=Platforms.v1):
+        self._platform = platform
         try:
             self._get_source_image()
-            self._vm_metadata = self._fill_metadata()
-            self._vm_resourse = self._fill_resourse()
+            self._vm_metadata = self.fill_metadata()
+            self._vm_resourse = self.fill_resourse()
             operation = self._create_instance(name, subnet_id)
             operation_result = self.sdk.wait_operation_and_get_result(
                 operation,
@@ -275,7 +320,7 @@ class InstanceService(YandexCloud):
     # For platform "standard-v1"
     # allowed core fractions: 5, 20, 100
     # allowed memory size: 1GB, 2GB, 3GB, 4GB, 5GB, 6GB, 7GB, 8GB.
-    def _fill_resourse(self, memory=2 * 2 ** 30, cores=2, core_fraction=20):
+    def fill_resourse(self, memory=2 * 2 ** 30, cores=2, core_fraction=20):
         # memory = 2 * 2 ** 30 = 2147483648  # 2Gb
         return {
             'memory': memory,
@@ -283,7 +328,7 @@ class InstanceService(YandexCloud):
             'core_fraction': core_fraction
         }
 
-    def _fill_metadata(self, **kwargs):
+    def fill_metadata(self, **kwargs):
         vm_metadata = {
             'serial-port-enable': '1',
             'user-data': self._collect_metadata(),
@@ -306,16 +351,14 @@ class InstanceService(YandexCloud):
         )
 
     def _create_instance(self, name, subnet_id):
-
         subnet_id = self.sdk.helpers.find_subnet_id(self.FOLDER_ID, self.ZONE)
         logger.debug(f'{subnet_id=}')
-        # TODO: Here is created Traceback!
         operation = self.instance_service.Create(CreateInstanceRequest(
             name=name,
             folder_id=self.FOLDER_ID,
             zone_id=self.ZONE,
             metadata=self._vm_metadata,
-            platform_id='standard-v1',
+            platform_id=self._platform,
             resources_spec=ResourcesSpec(**self._vm_resourse),
             boot_disk_spec=AttachedDiskSpec(
                 auto_delete=True,
@@ -325,8 +368,7 @@ class InstanceService(YandexCloud):
                     image_id=self.source_image.id,
                 )
             ),
-            network_interface_specs=[
-                NetworkInterfaceSpec(
+            network_interface_specs=[ NetworkInterfaceSpec(
                     subnet_id=subnet_id,
                     primary_v4_address_spec=PrimaryAddressSpec(
                         one_to_one_nat_spec=OneToOneNatSpec(

@@ -1,5 +1,5 @@
 import unittest
-from yandex_sdk_api.yandex_api import ConnectToCloud, YandexCloud, NetworkService, SubnetService, InstanceService, Zones
+from yandex_sdk_api.yandex_api import ConnectToCloud, YandexCloud, NetworkService, SubnetService, InstanceService, Zones, Platforms
 from settings import YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_IAMTOKEN
 
 YC_ZONE = Zones.test
@@ -17,7 +17,7 @@ class TestCloudConnection(unittest.TestCase):
         self.assertIsNotNone(YC_IAMTOKEN)
 
     def setUp(self):
-        connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
+        connector = ConnectToCloud(YC_CLOUD_ID, self.PLATFORM,
         self.cloud = YandexCloud(connector)
 
     def test_connect_to_cloud(self):
@@ -26,8 +26,6 @@ class TestCloudConnection(unittest.TestCase):
     def test_sdk(self):
         # '_channels', '_default_interceptor', 'client', 'create_operation_and_get_result', 'helpers', 'set_interceptor', 'wait_operation_and_get_result', 'waiter', 'wrappers'
         print(f'{dir(self.cloud.sdk)}')
-
-
 
     def test_helpers(self):
         # 'find_network_id', 'find_service_account_id', 'find_subnet_id', 'sdk'
@@ -73,7 +71,6 @@ class TestCloudNetwork(unittest.TestCase):
         import sys
         print(f'{sys.getsizeof(self.network.networks)=}')
 
-
     def test_create_network(self):
         sub_name = 'network-test-1'
         self.network.create(sub_name)
@@ -86,7 +83,6 @@ class TestCloudSubNet(unittest.TestCase):
         self.subnet = SubnetService(connector)
         self.network = NetworkService(connector)
         # self.network.id = self.network.list()['default']['id']
-
 
     def test_list_subnetnetwork(self):
         # subnets = self.subnet.subnets
@@ -123,13 +119,23 @@ class TestCreateInstance(unittest.TestCase):
         # 'ListAccessBindings', 'ListOperations', 'Move', 'Relocate', 'RemoveOneToOneNat',
         # 'Restart', 'SetAccessBindings', 'Start', 'Stop', 'Update', 'UpdateAccessBindings',
         # 'UpdateMetadata', 'UpdateNetworkInterface'
-        print(f'{dir(self.cloud.instance_service)}')
+        print(f'{dir(self.instance.instance_service)}')
+
     def test_create_instance(self):
         # subnet_id = 'e2l2gj8g1sl2rq8vurkt'
-        self.instance.create('test-create-grpc-vm')
+        name = 'test-create-grpc-vm'
+        self.instance.create(name, Platforms.v1)
 
     def test_list_instances(self):
-        pass
+        inst_list_instances = self.instance.list()
+        print(f'{dir(inst_list_instances)=}')
+        # print(f'{inst_list_instances.ClearField()=}')
+        list_instances = inst_list_instances.ListFields()[0][1]
+        self.assertGreater(len(list_instances), 0)
+        print(f'{len(list_instances)=}')
+        instance = list_instances[1]
+        print(f'{type(instance)=}')
+        print(f'{instance.name=}')
 
     def test_stop_instance(self):
         self.instance.stop()
