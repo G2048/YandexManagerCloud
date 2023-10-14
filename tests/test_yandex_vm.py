@@ -1,11 +1,11 @@
 import unittest
-from yandex_sdk_api.yandex_api import Zones, ConnectToCloud, YandexCloud, RegisterServices, CreateService, Services
+from templates import Zones, Platforms, Template
+from yandex_sdk_api.yandex_api import ConnectToCloud, YandexCloud, RegisterServices, CreateService, Services
 from settings import YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_IAMTOKEN
 
 YC_ZONE = Zones.test
 
 CREDENTIALS = dict(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
-
 
 class TestCloudConnection(unittest.TestCase):
 

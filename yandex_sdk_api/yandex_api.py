@@ -9,7 +9,7 @@ import yandexcloud
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 from yandex.cloud.resourcemanager.v1.cloud_service_pb2 import ListCloudsRequest
@@ -31,33 +31,14 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     ListInstancesRequest,
 )
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import InstanceServiceStub
-from yandex.cloud.vpc.v1.network_service_pb2 import ListNetworksRequest, CreateNetworkRequest, DeleteNetworkRequest
 from yandex.cloud.vpc.v1.network_service_pb2_grpc import NetworkServiceStub
-from yandex.cloud.vpc.v1.subnet_service_pb2 import ListSubnetsRequest, CreateSubnetRequest, DeleteSubnetRequest
 from yandex.cloud.vpc.v1.subnet_service_pb2_grpc import SubnetServiceStub
-
+from yandex.cloud.vpc.v1.network_service_pb2 import ListNetworksRequest, CreateNetworkRequest, DeleteNetworkRequest
+from yandex.cloud.vpc.v1.subnet_service_pb2 import ListSubnetsRequest, CreateSubnetRequest, DeleteSubnetRequest
 from settings import LogConfig
 
 logging.config.dictConfig(LogConfig)
 logger = logging.getLogger('consolemode')
-
-
-@dataclass
-class Zones:
-    core = 'ru-central1-a'
-    test = 'ru-central1-b'
-    draft = 'ru-central1-c'
-
-
-# About platforms see more:
-# https://cloud.yandex.com/en-ru/docs/compute/concepts/vm-platforms
-# https://cloud.yandex.com/en-ru/docs/compute/concepts/performance-levels
-@dataclass(frozen=True)
-class Platforms:
-    v1 = 'standard-v1'
-    v2 = 'standard-v2'
-    v3 = 'standard-v3'
-    highperformance = 'highfreq-v3'
 
 
 class ConnectToCloud:
@@ -78,22 +59,16 @@ class YandexCloud:
 
 
 @dataclass(frozen=True)
-class Template:
-    simple = dict()
-    medium = dict()
-    large = dict()
-
-@dataclass(frozen=True)
 class Services:
     instance = dict(service_name='Instance', service_stub=InstanceServiceStub, service_list=ListInstancesRequest,
                     service_create=CreateInstanceRequest, service_delete=DeleteInstanceRequest
                     )
     network = dict(service_name='Network', service_stub=NetworkServiceStub, service_list=ListNetworksRequest,
-                    service_create=CreateNetworkRequest, service_delete=DeleteNetworkRequest
-                    )
+                   service_create=CreateNetworkRequest, service_delete=DeleteNetworkRequest
+                   )
     subnet = dict(service_name='Subnet', service_stub=SubnetServiceStub, service_list=ListSubnetsRequest,
-                    service_create=CreateSubnetRequest, service_delete=DeleteSubnetRequest
-                    )
+                  service_create=CreateSubnetRequest, service_delete=DeleteSubnetRequest
+                  )
 
 
 class RegisterServices:
@@ -145,6 +120,7 @@ class CreateService(YandexCloud):
             logger.error(e, exc_info=True)
             return -1
         return 0
+
     # CreateSubnetRequest(folder_id=self.FOLDER_ID, name=subnet_name, zone_id=self.ZONE,
     #                     network_id=network_id,
     #                     v4_cidr_blocks=[ip_area]
@@ -181,40 +157,8 @@ class CreateService(YandexCloud):
 """
 
 
-
 class InstanceService(YandexCloud):
     INSTANCES: dict[Any, Any]
-    _list_filds = (
-        'id', 'name', 'created_at', 'folder_id',
-        'description', 'zone_id', 'platform_id',
-        'resources', 'status', 'metadata_options',
-        'boot_disk', 'network_interfaces', 'gpu_settings',
-        'fqdn', 'scheduling_policy', 'service_account_id',
-        'network_settings', 'placement_policy'
-    )
-    _filds_network_settings = ('type',)
-    _filds_scheduling_policy = ('preemptible',)
-    _filds_created_at = ('seconds',)
-
-    _filds_network_interfaces = ('index', 'mac_address', 'subnet_id', 'primary_v4_address',)
-    _filds_primary_v4_address = ('address', 'one_to_one_nat',)
-    _filds_one_to_one_nat = ('ip_version',)
-
-    _filds_boot_disk = ('mode', 'device_name', 'auto_delete', 'disk_id')
-    _filds_metadata_options = ('gce_http_endpoint', 'aws_v1_http_endpoint', 'gce_http_token', 'aws_v1_http_token')
-    _filds_resources = ('memory', 'cores', 'core_fraction')
-    _list_filds_1 = (
-        'id', 'name', 'created_at', 'folder_id',
-        'description', 'zone_id', 'platform_id',
-        'resources', 'status', 'metadata_options',
-        'boot_disk', 'network_interfaces', 'gpu_settings',
-        'fqdn', 'scheduling_policy', 'service_account_id',
-        'network_settings', 'placement_policy', 'type',
-        'preemptible', 'seconds', 'index', 'mac_address',
-        'subnet_id', 'primary_v4_address', 'address', 'one_to_one_nat',
-        'ip_version', 'mode', 'device_name', 'auto_delete', 'disk_id',
-        'gce_http_endpoint', 'aws_v1_http_endpoint', 'gce_http_token', 'aws_v1_http_token',
-    )
 
     def __init__(self, instance_id=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -259,7 +203,6 @@ class InstanceService(YandexCloud):
         response = self.sdk.wait_operation_and_get_result(operation)
         logger.info(f'Start instance {self.instance_id}')
         return response
-
 
     def create(self, name, subnet_id='enptcfuhbr6prphvj0re', platform=Platforms.v1):
         self._platform = platform
