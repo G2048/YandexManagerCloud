@@ -1,5 +1,5 @@
 import unittest
-from yandex_sdk_api.yandex_api import ConnectToCloud, YandexCloud, NetworkService, SubnetService, InstanceService, Zones, Platforms
+from yandex_sdk_api.yandex_api import Zones, ConnectToCloud, YandexCloud, RegisterServices, CreateService, Services
 from settings import YC_FOLDER_ID, YC_CLOUD_ID, YC_OAUTH, YC_IAMTOKEN
 
 YC_ZONE = Zones.test
@@ -17,7 +17,7 @@ class TestCloudConnection(unittest.TestCase):
         self.assertIsNotNone(YC_IAMTOKEN)
 
     def setUp(self):
-        connector = ConnectToCloud(YC_CLOUD_ID, self.PLATFORM,
+        connector = ConnectToCloud(**CREDENTIALS)
         self.cloud = YandexCloud(connector)
 
     def test_connect_to_cloud(self):
@@ -42,10 +42,17 @@ class TestCloudNetwork(unittest.TestCase):
 
     def setUp(self):
         connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
-        self.network = NetworkService(connector)
+        service = RegisterServices(**Services.network)
+        self.network = CreateService(service, connector)
+        # self.network.create(**Template.simple)
+        # self.network.list().id[0]
+        # self.network.id = '123'
+        # self.network.stop()
+        # self.network.start()
 
     def test_list_network(self):
         networks = self.network.list()
+        print(f'{networks=}')
         # 'ByteSize', 'Clear', 'ClearExtension', 'ClearField', 'CopyFrom',
         # 'DESCRIPTOR', 'DiscardUnknownFields', 'Extensions', 'FindInitializationErrors',
         # 'FromString', 'HasExtension', 'HasField', 'IsInitialized', 'ListFields',
@@ -53,23 +60,35 @@ class TestCloudNetwork(unittest.TestCase):
         # 'SerializePartialToString', 'SerializeToString', 'SetInParent', 'UnknownFields',
         # 'WhichOneof', '_CheckCalledFromGeneratedFile', '_ListFieldsItemKey', '_SetListener',
         print(f'{dir(networks)=}')
-        list_filds = networks.ListFields()
-        self.assertIsInstance(list_filds, list)
-        print(f'{list_filds=}')
-
-        list_networks = networks.networks
-        self.assertGreater(len(list_networks), 0)
-        # self.assertIsInstance(list_networks, list)
-        print(f'{list_networks=}')
+        print(f'{type(networks)=}')
 
         print(f'{dir(networks.DESCRIPTOR)=}')
-        print(f'{networks.DESCRIPTOR.fields=}')
-        print(f'{networks.SerializeToString()=}')
-        # networks = list_network.networks
-        print(f'{self.network._handle_filds_todict(networks.networks)=}')
-        print(f'{self.network.networks=}')
-        import sys
-        print(f'{sys.getsizeof(self.network.networks)=}')
+        print(f'{id(networks.DESCRIPTOR.EnumValueName)=}')
+        message = networks.SerializeToString()
+        print(f'{message=}')
+        print(f'{networks.ParseFromString(message)=}')
+        # print(f'{self.network._handle_filds_todict(networks.networks)=}')
+        filds = networks.ListFields()[0]
+        self.assertIsInstance(filds, tuple)
+        print(f'{filds[1]=}')
+        print(f'{type(filds[1])=}')
+        # For more see:
+        # https://googleapis.dev/python/protobuf/latest/google/protobuf/internal/containers.html
+        conteiner = filds[1]
+        print(f'{dir(conteiner)=}')
+        len_container = len(conteiner)
+        self.assertGreater(len_container, 0)
+        print('==================================')
+        # while conteiner:
+        message_value = conteiner.pop()
+        print(f'{message_value=}')
+        print(f'{type(message_value)=}')
+        print(f'{dir(message_value)=}')
+        from google.protobuf.json_format import MessageToDict
+        message = MessageToDict(message_value)
+        # message = MessageToDict(networks)
+        self.assertIsInstance(message, dict)
+        print(f'{message=}')
 
     def test_create_network(self):
         sub_name = 'network-test-1'
@@ -80,16 +99,18 @@ class TestCloudSubNet(unittest.TestCase):
 
     def setUp(self):
         connector = ConnectToCloud(YC_CLOUD_ID, YC_FOLDER_ID, YC_ZONE, YC_OAUTH)
-        self.subnet = SubnetService(connector)
-        self.network = NetworkService(connector)
+        service = RegisterServices(**Services.subnet)
+        self.subnet = CreateService(service, connector)
         # self.network.id = self.network.list()['default']['id']
 
     def test_list_subnetnetwork(self):
-        # subnets = self.subnet.subnets
         subnets = self.subnet.list()
-        self.assertGreater(len(self.subnet.subnets), 0)
-        print(f'{self.subnet.subnets["name"]=}')
-        print(f'{self.subnet.subnets=}')
+        print(f'{subnets=}')
+        print(f'{type(subnets.subnets[0])=}')
+        print(f'{subnets.subnets[0].id=}')
+        print(f'{type(subnets)=}')
+        print(f'{dir(subnets)=}')
+        print(f'{self.subnet.response=}')
 
     def test_create_subnet(self):
         sub_name = 'subnet-test-1'

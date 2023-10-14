@@ -1,16 +1,17 @@
-#!/usr/bin/env python3
 import os
 import argparse
 import sys
 import traceback
 import logging.config
-from typing import Dict, Any
 
 import grpc
 import yandexcloud
 
+from copy import deepcopy
 from dataclasses import dataclass
+from typing import Dict, Any
 
+from google.protobuf.json_format import MessageToDict
 from yandex.cloud.resourcemanager.v1.cloud_service_pb2 import ListCloudsRequest
 from yandex.cloud.compute.v1.image_service_pb2 import GetImageLatestByFamilyRequest
 from yandex.cloud.compute.v1.image_service_pb2_grpc import ImageServiceStub
@@ -30,10 +31,8 @@ from yandex.cloud.compute.v1.instance_service_pb2 import (
     ListInstancesRequest,
 )
 from yandex.cloud.compute.v1.instance_service_pb2_grpc import InstanceServiceStub
-
 from yandex.cloud.vpc.v1.network_service_pb2 import ListNetworksRequest, CreateNetworkRequest, DeleteNetworkRequest
 from yandex.cloud.vpc.v1.network_service_pb2_grpc import NetworkServiceStub
-
 from yandex.cloud.vpc.v1.subnet_service_pb2 import ListSubnetsRequest, CreateSubnetRequest, DeleteSubnetRequest
 from yandex.cloud.vpc.v1.subnet_service_pb2_grpc import SubnetServiceStub
 
@@ -49,10 +48,11 @@ class Zones:
     test = 'ru-central1-b'
     draft = 'ru-central1-c'
 
+
 # About platforms see more:
 # https://cloud.yandex.com/en-ru/docs/compute/concepts/vm-platforms
 # https://cloud.yandex.com/en-ru/docs/compute/concepts/performance-levels
-@dataclass
+@dataclass(frozen=True)
 class Platforms:
     v1 = 'standard-v1'
     v2 = 'standard-v2'
@@ -69,127 +69,117 @@ class ConnectToCloud:
         self.TOKEN = token
 
 
-
 class YandexCloud:
-    def __init__(self, connector, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.connection = connector
+    def __init__(self, connector: ConnectToCloud, *args, **kwargs):
         __interceptor = yandexcloud.RetryInterceptor(max_retry_count=10, retriable_codes=[grpc.StatusCode.UNAVAILABLE])
-        self.sdk = yandexcloud.SDK(interceptor=__interceptor, token=self.connection.OAUTH)
-        self.FOLDER_ID = self.connection.FOLDER_ID
-        self.ZONE = self.connection.ZONE
+        self.sdk = yandexcloud.SDK(interceptor=__interceptor, token=connector.OAUTH)
+        self.FOLDER_ID = connector.FOLDER_ID
+        self.ZONE = connector.ZONE
 
 
-class NetworkService(YandexCloud):
-    _list_filds = (
-        'id', 'name', 'folder_id', 'created_at', 'default_security_group_id'
-    )
+@dataclass(frozen=True)
+class Template:
+    simple = dict()
+    medium = dict()
+    large = dict()
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.networks_service = self.sdk.client(NetworkServiceStub)
-        self.networks = dict()
-        # self.network_id = self.sdk.helpers.find_network_id(folder_id=self.FOLDER_ID)
-        # self.subnet_id = self.sdk.helpers.find_subnet_id(
-        #     folder_id=self.FOLDER_ID,
-        #     zone_id=self.ZONE,
-        #     network_id=self.network_id,
-        # )
+@dataclass(frozen=True)
+class Services:
+    instance = dict(service_name='Instance', service_stub=InstanceServiceStub, service_list=ListInstancesRequest,
+                    service_create=CreateInstanceRequest, service_delete=DeleteInstanceRequest
+                    )
+    network = dict(service_name='Network', service_stub=NetworkServiceStub, service_list=ListNetworksRequest,
+                    service_create=CreateNetworkRequest, service_delete=DeleteNetworkRequest
+                    )
+    subnet = dict(service_name='Subnet', service_stub=SubnetServiceStub, service_list=ListSubnetsRequest,
+                    service_create=CreateSubnetRequest, service_delete=DeleteSubnetRequest
+                    )
 
-    # def _handle_request(self, request):
-    def list(self):
-        networks = self.networks_service.List(ListNetworksRequest(folder_id=self.FOLDER_ID))
-        self._handle_filds_tolist(networks.networks)
-        return networks
 
-    def _handle_filds_todict(self, networks):
-        self.networks = {}
-        for network in networks:
-            vault = {}
-            self.networks[network.name] = vault
-            for fild in self._list_filds:
-                vault[fild] = getattr(network, fild)
-        return self.networks
+class RegisterServices:
+    def __init__(self, service_name, service_stub, service_list, service_create, service_delete):
+        self.name = service_name
+        self.stub = service_stub
+        self.list = service_list
+        self.create = service_create
+        self.delete = service_delete
+        self.meta_type = DeleteInstanceMetadata
 
-    def _handle_filds_tolist(self, networks):
-        self.networks = {}
-        for fild in self._list_filds:
-            self.networks[fild] = []
 
-        for network in networks:
-            for fild in self._list_filds:
-                value = getattr(network, fild)
-                self.networks[fild].append(value)
-        return self.networks
+class CreateService(YandexCloud):
+    def __init__(self, service: RegisterServices, connector: ConnectToCloud):
+        super().__init__(connector=connector)
+        self.service = service
+        self.client = self.sdk.client(self.service.stub)
+        self.service_id = ''
 
-    def create(self, network_name):
-        operation = self.networks_service.Create(CreateNetworkRequest(folder_id=self.FOLDER_ID, name=network_name))
+    @property
+    def id(self) -> str:
+        if self.service_id == '':
+            raise Exception('You must to provide the service id!')
+        return self.service_id
+
+    @id.setter
+    def id(self, service_id: str):
+        self.service_id = service_id
+
+    @staticmethod
+    def _filds_to_dict(list_response) -> dict:
+        filds = list_response.ListFields()[0]
+        message_value = filds[1].pop()
+        return MessageToDict(message_value)
+
+    def list(self, **kwargs) -> dict:
+        # метод List работает без операций и сразу возвращает результат
+        list_response = self.client.List(self.service.list(folder_id=self.FOLDER_ID, **kwargs))
+        response = deepcopy(list_response)
+        self.response = self._filds_to_dict(response)
+        return list_response
+
+    def create(self, service_name, **kwargs):
+        try:
+            operation = self.client.Create(self.service.create(folder_id=self.FOLDER_ID, name=service_name, **kwargs))
+            self.sdk.wait_operation_and_get_result(operation)
+        except Exception as e:
+            # logger.error(traceback.extract_stack())
+            logger.error(e, exc_info=True)
+            return -1
+        return 0
+    # CreateSubnetRequest(folder_id=self.FOLDER_ID, name=subnet_name, zone_id=self.ZONE,
+    #                     network_id=network_id,
+    #                     v4_cidr_blocks=[ip_area]
+    #                     )
+
+    def delete(self, **kwargs):
+        operation = self.client.Delete(self.service.delete(**kwargs))
+        logger.info(f'Try to delete {self.service.name} {self.id}')
         self.sdk.wait_operation_and_get_result(operation)
-        logger.info(f'Create network: {network_name}')
+        # meta_type = DeleteInstanceMetadata,
+        logger.info(f'Deleted {self.client.name} {self.id}')
         return 0
 
-    def delete(self, network_id):
-        operation = self.networks_service.Delete(DeleteNetworkRequest(network_id=network_id))
-        logger.info(f'Try to delete subnet {network_id}')
-        self.sdk.wait_operation_and_get_result(operation)
-        logger.info(f'Deleted instance {network_id}')
-        return 0
-
-
-class SubnetService(YandexCloud):
-    _list_filds = (
-        'id', 'name', 'created_at',
-        'folder_id', 'description',
-        'network_id', 'zone_id', 'v4_cidr_blocks'
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.subnets = dict()
-        self.subnet_service = self.sdk.client(SubnetServiceStub)
-
-    def list(self):
-        subnets = self.subnet_service.List(ListSubnetsRequest(folder_id=self.FOLDER_ID))
-        self._handle_filds_tolist(subnets.subnets)
-        return subnets
-
-    def _handle_filds_todict(self, subnets):
-        self.subnets = {}
-        for subnet in subnets:
-            vault = {}
-            self.subnets[subnet.name] = vault
-            for fild in self._list_filds:
-                vault[fild] = getattr(subnet, fild)
-        return self.subnets
-
-    def _handle_filds_tolist(self, subnets):
-        self.subnets = {}
+    def _handle_filds_tolist(self, services):
+        self.services = {}
         for fild in self._list_filds:
-            self.subnets[fild] = []
+            self.services[fild] = []
 
-        for subnet in subnets:
+        for service in services:
             for fild in self._list_filds:
-                value = getattr(subnet, fild)
-                self.subnets[fild].append(value)
-        return self.subnets
+                value = getattr(service, fild)
+                self.service[fild].append(value)
+        return self.services
 
-    def create(self, subnet_name, network_id, ip_area, **kwargs):
-        operation = self.subnet_service.Create(
-            CreateSubnetRequest(folder_id=self.FOLDER_ID, name=subnet_name, zone_id=self.ZONE,
-                                network_id=network_id,
-                                v4_cidr_blocks=[ip_area]))
-        response = self.sdk.wait_operation_and_get_result(operation)
-        logger.info(f'Response: {response.response}')
-        logger.info(f'Create subnet: {subnet_name}')
-        return 0
 
-    def delete(self, subnet_id):
-        operation = self.subnet_service.Delete(DeleteSubnetRequest(subnet_id=subnet_id))
-        logger.info(f'Try to delete subnet {subnet_id}')
-        response = self.sdk.wait_operation_and_get_result(operation)
-        logger.info(f'Response: {response.response}')
-        logger.info(f'Deleted instance {subnet_id}')
-        return 0
+"""
+>>> service = RegisterServices(**Services.instance)
+>>> instance = CreateService(service)
+>>> instance.create(**Template.simple)
+>>> instance.list().id[0]
+>>> instance.id = '123'
+>>> instance.stop()
+>>> instance.start()
+"""
+
 
 
 class InstanceService(YandexCloud):
@@ -226,24 +216,15 @@ class InstanceService(YandexCloud):
         'gce_http_endpoint', 'aws_v1_http_endpoint', 'gce_http_token', 'aws_v1_http_token',
     )
 
-    def __init__(self, instance_id=None,  *args, **kwargs):
+    def __init__(self, instance_id=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.instance_id = instance_id
-        self.instance_service = self.sdk.client(InstanceServiceStub)
-        # self.fill_missing_arguments()
-
-    def list(self):
-        # метод List работает без операций и сразу возвращает результат
-        instances = self.instance_service.List(ListInstancesRequest(folder_id=self.FOLDER_ID))
-        self._handle_filds_tolist(instances.instances)
-        # logger.debug(f'List instances {instances=}')
-        return instances
 
     def _handle_filds_tolist(self, instances):
         self.INSTANCES = {}
         self.__iter_instances(instances, self._list_filds)
 
         return self.INSTANCES
+
     def __iter_instances(self, instances, list_filds):
         for fild in list_filds:
             self.INSTANCES[fild] = []
@@ -260,23 +241,10 @@ class InstanceService(YandexCloud):
         vault = {}
         for fild in list_filds:
             # if f'_filds_{fild}' in locals().keys():
-                # self.__iter(locals()[fild])
+            # self.__iter(locals()[fild])
             value = getattr(instance, fild)
             vault[fild].append(value)
         return vault
-
-    def fill_missing_arguments(self):
-        pass
-
-    def delete(self):
-        operation = self.instance_service.Delete(DeleteInstanceRequest(instance_id=self.instance_id))
-        logger.info(f'Try to delete instance {self.instance_id}')
-        self.sdk.wait_operation_and_get_result(
-            operation,
-            meta_type=DeleteInstanceMetadata,
-        )
-        logger.info(f'Deleted instance {self.instance_id}')
-        return 0
 
     def stop(self):
         operation = self.instance_service.Stop(StopInstanceRequest(instance_id=self.instance_id))
@@ -292,10 +260,6 @@ class InstanceService(YandexCloud):
         logger.info(f'Start instance {self.instance_id}')
         return response
 
-    # def __call__(self, *args, **kwargs):
-    #     print('__call__ is release!')
-    #         raise ValueError('Instance has not is None!')
-    #     object.__call__(*args, **kwargs)
 
     def create(self, name, subnet_id='enptcfuhbr6prphvj0re', platform=Platforms.v1):
         self._platform = platform
@@ -368,16 +332,17 @@ class InstanceService(YandexCloud):
                     image_id=self.source_image.id,
                 )
             ),
-            network_interface_specs=[ NetworkInterfaceSpec(
-                    subnet_id=subnet_id,
-                    primary_v4_address_spec=PrimaryAddressSpec(
-                        one_to_one_nat_spec=OneToOneNatSpec(
-                            ip_version=IPV4,
-                        )
+            network_interface_specs=[NetworkInterfaceSpec(
+                subnet_id=subnet_id,
+                primary_v4_address_spec=PrimaryAddressSpec(
+                    one_to_one_nat_spec=OneToOneNatSpec(
+                        ip_version=IPV4,
                     )
-                ),
+                )
+            ),
             ],
-        ))
+        )
+        )
         logger.info(f'Creating virtual machine {name} initiated!')
         return operation
 
