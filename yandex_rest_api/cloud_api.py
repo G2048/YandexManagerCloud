@@ -12,13 +12,9 @@
 # You should have received a copy of the GNU General Public License
 # along with YandexManagerCloud. If not, see <https://www.gnu.org/licenses/>.
 
-import re
-import os
-import json
 import requests
 import logging.config
 
-from abc import ABC, abstractmethod
 from requests import exceptions
 from settings import LogConfig, YC_IAMTOKEN, YC_CLOUD_ID, YC_FOLDER_ID
 
@@ -27,20 +23,24 @@ logger = logging.getLogger('')
 logger.setLevel(20)
 
 
-class Api:
+class MetaSingleton(type):
+    def __init__(cls, name, bases, classdict, **kwargs):
+        super().__init__(name, bases, classdict, **kwargs)
+        cls.INSTANCE = None
+
+    def __call__(cls, *args, **kwargs):
+        if cls.INSTANCE is None:
+            cls.INSTANCE = super().__call__(*args, **kwargs)
+        return cls.INSTANCE
+
+
+
+class Api(metaclass=MetaSingleton):
     '''curl.exe -H "Authorization: Bearer $Env:YC_TOKEN"
     "https://compute.api.cloud.yandex.net/compute/v1/images?folderId=standard-images&pageSize=1000"
     '''
-
-    __instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls.__instance is None:
-            cls.__instance = super().__new__(cls, *args, **kwargs)
-        return cls.__instance
-
     def __init__(self, service):
-        self.API_URL = f'https://{service}.api.cloud.yandex.net/'
+        self.API_URL = f'https://{service}.api.{service}.yandex.net/'
         self.HEADERS = {'Authorization': f'Bearer {YC_IAMTOKEN}'}
 
     @staticmethod
