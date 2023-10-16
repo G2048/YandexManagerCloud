@@ -58,6 +58,7 @@ class YandexCloud:
         self.ZONE = connector.ZONE
 
 
+
 @dataclass(frozen=True)
 class Services:
     instance = dict(service_name='Instance', service_stub=InstanceServiceStub, service_list=ListInstancesRequest,
@@ -86,20 +87,20 @@ class CreateService(YandexCloud):
         super().__init__(connector=connector)
         self.service = service
         self.client = self.sdk.client(self.service.stub)
-        self.service_id = ''
+        self._service_id = None
 
     @property
     def id(self) -> str:
-        if self.service_id == '':
+        if self._service_id is None:
             raise Exception('You must to provide the service id!')
-        return self.service_id
+        return self._service_id
 
     @id.setter
     def id(self, service_id: str):
-        self.service_id = service_id
+        self._service_id = service_id
 
     @staticmethod
-    def _filds_to_dict(list_response) -> dict:
+    def _message_to_dict(list_response) -> dict:
         filds = list_response.ListFields()[0]
         message_value = filds[1].pop()
         return MessageToDict(message_value)
@@ -108,7 +109,7 @@ class CreateService(YandexCloud):
         # метод List работает без операций и сразу возвращает результат
         list_response = self.client.List(self.service.list(folder_id=self.FOLDER_ID, **kwargs))
         response = deepcopy(list_response)
-        self.response = self._filds_to_dict(response)
+        self.response = self._message_to_dict(response)
         return list_response
 
     def create(self, service_name, **kwargs):
@@ -116,7 +117,6 @@ class CreateService(YandexCloud):
             operation = self.client.Create(self.service.create(folder_id=self.FOLDER_ID, name=service_name, **kwargs))
             self.sdk.wait_operation_and_get_result(operation)
         except Exception as e:
-            # logger.error(traceback.extract_stack())
             logger.error(e, exc_info=True)
             return -1
         return 0
@@ -134,18 +134,6 @@ class CreateService(YandexCloud):
         logger.info(f'Deleted {self.client.name} {self.id}')
         return 0
 
-    def _handle_filds_tolist(self, services):
-        self.services = {}
-        for fild in self._list_filds:
-            self.services[fild] = []
-
-        for service in services:
-            for fild in self._list_filds:
-                value = getattr(service, fild)
-                self.service[fild].append(value)
-        return self.services
-
-
 """
 >>> service = RegisterServices(**Services.instance)
 >>> instance = CreateService(service)
@@ -162,33 +150,6 @@ class InstanceService(YandexCloud):
 
     def __init__(self, instance_id=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-    def _handle_filds_tolist(self, instances):
-        self.INSTANCES = {}
-        self.__iter_instances(instances, self._list_filds)
-
-        return self.INSTANCES
-
-    def __iter_instances(self, instances, list_filds):
-        for fild in list_filds:
-            self.INSTANCES[fild] = []
-
-        for instance in instances:
-            for fild in list_filds:
-                value = getattr(instance, fild)
-                if f'_filds_{fild}' in locals().keys():
-                    value = self.__iter(instance.fild, locals()[fild])
-                self.INSTANCES[fild].append(value)
-        return
-
-    def __iter(self, instance, list_filds):
-        vault = {}
-        for fild in list_filds:
-            # if f'_filds_{fild}' in locals().keys():
-            # self.__iter(locals()[fild])
-            value = getattr(instance, fild)
-            vault[fild].append(value)
-        return vault
 
     def stop(self):
         operation = self.instance_service.Stop(StopInstanceRequest(instance_id=self.instance_id))
