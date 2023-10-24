@@ -12,19 +12,13 @@
 # You should have received a copy of the GNU General Public License
 # along with YandexManagerCloud. If not, see <https://www.gnu.org/licenses/>.
 
-# from subprocess import getoutput
 from os import environ
-from dotenv import load_dotenv
+from subprocess import getoutput
 
-load_dotenv()
-YC_IAMTOKEN = environ.get('YC_IAMTOKEN')
+YC_IAMTOKEN = getoutput('yc iam create-token')
 YC_CLOUD_ID = environ.get('YC_CLOUD_ID')
 YC_FOLDER_ID = environ.get('YC_FOLDER_ID')
 YC_OAUTH = environ.get('YC_OAUTH')
-
-# YC_TOKEN = getoutput('yc iam create-token')
-# YC_CLOUD_ID = getoutput('yc config get cloud-id')
-# YC_FOLDER_ID = getoutput('yc config get folder-id')
 
 LogConfig = {
     'version': 1,
