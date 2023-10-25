@@ -1,11 +1,13 @@
 from subprocess import getoutput
 from os import environ
+from dotenv import load_dotenv
+
+load_dotenv()
 
 YC_IAMTOKEN = getoutput('yc iam create-token')
 YC_CLOUD_ID = environ.get('YC_CLOUD_ID')
 YC_FOLDER_ID = environ.get('YC_FOLDER_ID')
 YC_OAUTH = environ.get('YC_OAUTH')
-
 
 LogConfig = {
     'version': 1,
