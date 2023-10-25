@@ -7,6 +7,7 @@ YC_ZONE = Zones.test
 
 CREDENTIALS = dict(cloud_id=YC_CLOUD_ID, folder_id=YC_FOLDER_ID, zone=YC_ZONE, oauth=YC_OAUTH)
 
+
 class TestCloudConnection(unittest.TestCase):
 
     def test_fill_connection_cloud_variables(self):
@@ -25,17 +26,28 @@ class TestCloudConnection(unittest.TestCase):
 
     def test_sdk(self):
         # '_channels', '_default_interceptor', 'client', 'create_operation_and_get_result', 'helpers', 'set_interceptor', 'wait_operation_and_get_result', 'waiter', 'wrappers'
+        self.assertIsNotNone(self.cloud.sdk)
         print(f'{dir(self.cloud.sdk)}')
 
-    def test_helpers(self):
+
+class TestCloudHelpers(unittest.TestCase):
+    def setUp(self):
+        connector = ConnectToCloud(**CREDENTIALS)
+        self.cloud = YandexCloud(connector)
         # 'find_network_id', 'find_service_account_id', 'find_subnet_id', 'sdk'
         print(f'{dir(self.cloud.sdk.helpers)}')
+
+    def test_service_account(self):
         account_id = self.cloud.sdk.helpers.find_service_account_id(folder_id=YC_FOLDER_ID)
         print(f'{account_id=}')
-        # network_id = self.cloud.sdk.helpers.find_network_id(folder_id=YC_FOLDER_ID)
-        # print(f'{network_id=}')
-        # subnet_id = self.cloud.sdk.helpers.find_subnet_id(folder_id=YC_FOLDER_ID, zone_id=YC_ZONE)
-        # print(f'{subnet_id=}')
+
+    def test_network(self):
+        network_id = self.cloud.sdk.helpers.find_network_id(folder_id=YC_FOLDER_ID)
+        print(f'{network_id=}')
+
+    def test_subnet(self):
+        subnet_id = self.cloud.sdk.helpers.find_subnet_id(folder_id=YC_FOLDER_ID, zone_id=YC_ZONE)
+        print(f'{subnet_id=}')
 
 
 class TestCloudNetwork(unittest.TestCase):

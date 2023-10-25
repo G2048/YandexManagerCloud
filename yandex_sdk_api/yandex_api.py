@@ -1,7 +1,3 @@
-import os
-import argparse
-import sys
-import traceback
 import logging.config
 
 import grpc
@@ -36,6 +32,7 @@ from yandex.cloud.vpc.v1.subnet_service_pb2_grpc import SubnetServiceStub
 from yandex.cloud.vpc.v1.network_service_pb2 import ListNetworksRequest, CreateNetworkRequest, DeleteNetworkRequest
 from yandex.cloud.vpc.v1.subnet_service_pb2 import ListSubnetsRequest, CreateSubnetRequest, DeleteSubnetRequest
 from settings import LogConfig
+from templates import Platforms, Zones
 
 logging.config.dictConfig(LogConfig)
 logger = logging.getLogger('consolemode')
@@ -150,6 +147,7 @@ class InstanceService(YandexCloud):
 
     def __init__(self, instance_id=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.subnet_id = 'enptcfuhbr6prphvj0re'
 
     def stop(self):
         operation = self.instance_service.Stop(StopInstanceRequest(instance_id=self.instance_id))
@@ -165,13 +163,13 @@ class InstanceService(YandexCloud):
         logger.info(f'Start instance {self.instance_id}')
         return response
 
-    def create(self, name, subnet_id='enptcfuhbr6prphvj0re', platform=Platforms.v1):
+    def create(self, name, platform=Platforms.v1):
         self._platform = platform
         try:
             self._get_source_image()
             self._vm_metadata = self.fill_metadata()
             self._vm_resourse = self.fill_resourse()
-            operation = self._create_instance(name, subnet_id)
+            operation = self._create_instance(name, self.subnet_id)
             operation_result = self.sdk.wait_operation_and_get_result(
                 operation,
                 response_type=Instance,

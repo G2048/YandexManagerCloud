@@ -1,6 +1,3 @@
-import re
-import os
-import json
 import requests
 import logging.config
 
@@ -9,8 +6,8 @@ from requests import exceptions
 from settings import LogConfig, YC_IAMTOKEN, YC_CLOUD_ID, YC_FOLDER_ID
 
 logging.config.dictConfig(LogConfig)
-logger = logging.getLogger('')
-logger.setLevel(20)
+logger = logging.getLogger('consolemode')
+logger.setLevel(10)
 
 
 class Api:
@@ -26,7 +23,7 @@ class Api:
         return cls.__instance
 
     def __init__(self, service):
-        self.API_URL = f'https://{service}.api.cloud.yandex.net/'
+        self.API_URL = f'https://{service}.api.cloud.yandex.net/{service}/v1/'
         self.HEADERS = {'Authorization': f'Bearer {YC_IAMTOKEN}'}
 
     @staticmethod
@@ -36,44 +33,88 @@ class Api:
         except exceptions.JSONDecodeError:
             return False
 
-    def _request(self, url, params, method='GET', *args, **kwargs):
-        logger.debug(f'{url}, {params=}, {self.HEADERS=}')
-        response = requests.request(method, url=url, params=params, headers=self.HEADERS)
-        logger.debug(response.status_code)
+    def _request(self, url, params=None, method='GET', *args, **kwargs):
+        url = self.API_URL + url
+        self.response = requests.request(method, url=url, params=params, headers=self.HEADERS)
+        logger.debug(self.response.url)
+        logger.debug(self.response.status_code)
 
-        if response.ok:
-            data_json = self._validateJson(response.json)
+        if self.response.ok:
+            data_json = self._validateJson(self.response.json)
             if data_json:
                 return data_json
-            else:
-                return None
 
 
-class YandexInstance(Api):
+class YandexResourceManager(ABC, Api):
+    def __init__(self):
+        super().__init__('resource-manager')
+
+    @abstractmethod
+    def list(self):
+        pass
+
+
+class Folder(YandexResourceManager):
+    def list(self):
+        return self._request('folders', {'cloudId': YC_CLOUD_ID}).get('folders')
+
+
+class YandexVPC(ABC, Api):
+    def __init__(self):
+        super().__init__('vpc')
+        self.folder_id = YC_FOLDER_ID
+
+    @abstractmethod
+    def list(self):
+        pass
+
+
+class Network(YandexVPC):
+    def list(self):
+        return self._request('networks', {'folderId': self.folder_id}).get('networks')
+
+
+class Address(YandexVPC):
+
+    def list(self):
+        return self._request('addresses', {'folderId': self.folder_id}).get('addresses')
+
+
+class Subnet(YandexVPC):
+
+    def list(self):
+        return self._request('subnets', {'folderId': self.folder_id}).get('subnets')
+
+
+class SecurityGroup(YandexVPC):
+    def list(self):
+        return self._request('securityGroups', {'folderId': self.folder_id}).get('securityGroups')
+
+
+class YandexComputeCloud(ABC, Api):
+    def __init__(self):
+        super().__init__('compute')
+        self.folder_id = YC_FOLDER_ID
+
+    @abstractmethod
+    def list(self):
+        pass
+
+
+class Images(YandexComputeCloud):
     def __init__(self):
         super().__init__()
-
-
-class YandexApi(Api):
-    def __init__(self, ):
-        super().__init__()
+        self.folder_id = 'standard-images'
 
     # "https://compute.api.cloud.yandex.net/compute/v1/images?folderId=standard-images&pageSize=1000"
-    def get_images(self, *, imagestype='standard-images', pagesize='100') -> list:
-        PARAMS = {'folderId': imagestype, 'pageSize': pagesize}
-        ready_url = f'{self.API_URL}compute/v1/images'
-        images = self._request(url=ready_url, params=PARAMS).get('images')
-        return images
+    def list(self):
+        return self._request('images', {'folderId': self.folder_id}).get('images')
 
-    def get_instances(self) -> list:
-        ready_url = f'{self.API_URL}compute/v1/instances'
-        PARAMS = {'folderId': YC_FOLDER_ID}
-        instances = self._request(url=ready_url, params=PARAMS).get('instances')
-        return instances
+    def getLatestByFamily(self, family):
+        params = {'folderId': self.folder_id, 'family': family}
+        return self._request(f'images:latestByFamily', params=params)
 
 
-if __name__ == '__main__':
-    api = YandexApi()
-    api.get_images()
-    # resources = ResourcesAPI(api=YandexAPI)
-    # resources.api.get_images()
+class Instance(YandexComputeCloud):
+    def list(self):
+        return self._request('instances', {'folderId': self.folder_id}).get('instances')
